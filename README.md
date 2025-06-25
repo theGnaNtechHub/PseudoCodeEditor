@@ -56,7 +56,7 @@ The **Pseudo-code Editor** is a core component of the [`VteacH`](https://github.
 ### 1. Clone the Repo
 
 ```
-git clone https://github.com/theGnaN/pseudocode-editor.git
+git clone https://github.com/theGnaNtechHub/PseudoCodeEditor.git
 cd pseudocode-editor
 ```
 2. Install Dependencies
@@ -99,6 +99,6 @@ Built with passion by theGnaN team
 
 Maintained by: @manideepakgampa + Contributors
 
-📌 Part of theGnaN – VteacH
+📌 Part of theGnaN – [`VteacH`](https://github.com/theGnaNtechHub/VteacH)
 
-🌐 theGnaN Official Website - www.thegnan.in
+🌐 [`theGnaN Official Website`](www.thegnan.in)
