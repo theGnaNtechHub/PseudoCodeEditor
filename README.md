@@ -7,7 +7,7 @@
 
 ## 🚀 What is this?
 
-The **Pseudo-code Editor** is a core component of the [`VteacH`](https://github.com/manideepakgampa/ELearn) platform — a logic-first e-learning solution by **theGnaN**. This tool lets students write structured pseudo-code, validate its syntax, simulate execution step-by-step, and build logic without being bound to any programming language.
+The **Pseudo-code Editor** is a core component of the [`VteacH`](https://github.com/theGnaNtechHub/VteacH) platform — a logic-first e-learning solution by **theGnaN**. This tool lets students write structured pseudo-code, validate its syntax, simulate execution step-by-step, and build logic without being bound to any programming language.
 
 ### 🌟 Key Highlights
 - ✅ **Real-time syntax checking**
