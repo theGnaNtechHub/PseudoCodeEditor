@@ -101,4 +101,4 @@ Maintained by: @manideepakgampa + Contributors
 
 📌 Part of theGnaN – [`VteacH`](https://github.com/theGnaNtechHub/VteacH)
 
-🌐 [`theGnaN Official Website`](www.thegnan.in)
+🌐 [`theGnaN Official Website`](https://www.thegnan.in)
