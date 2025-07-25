@@ -1,56 +1,58 @@
 # parser.py
+"""
+    Evaluates pseudo-code with variable assignments, print statements, and simple if-else blocks.
+
+    Supports:
+    - Assignments: x = 10
+    - Expressions: +, -, *, /, string concat, boolean logic
+    - Strings and Booleans: name = "John", flag = True
+    - Print: print x
+    - If-Else (4-space indentation, no nesting)
+"""
+
+import sys
+import io
 
 def evaluate_pseudocode(code: str):
-    """
-    Evaluates simple pseudo-code with variable assignments and print statements.
-    
-    Supported syntax:
-    - Variable assignments: x = 10
-    - Expressions with +, -, *, /: print x + y
-    - Only one statement per line
-    """
-    
     lines = code.strip().split('\n')
-    variables = {}   # To hold variable names and values
-    output = []      # To collect printed outputs
+    variables = {}
+    output_buffer = io.StringIO()
 
-    for i, line in enumerate(lines, start=1):
-        line = line.strip()
+    # Fix print statements: make print x ➝ print(x)
+    fixed_lines = []
+    for line in lines:
+        stripped = line.strip()
+        indent = len(line) - len(stripped)
 
-        if not line:
-            continue  # skip empty lines
+        if stripped.startswith("print ") and not stripped.startswith("print("):
+            expr = stripped[6:]  # Remove 'print '
+            fixed_line = " " * indent + f"print({expr})"
+        else:
+            fixed_line = line
+        fixed_lines.append(fixed_line)
 
-        try:
-            if line.startswith("print"):
-                # Handle print statement
-                expr = line[5:].strip()  # Remove 'print'
-                result = eval(expr, {}, variables)
-                output.append(str(result))
+    final_code = "\n".join(fixed_lines)
 
-            elif "=" in line:
-                # Handle assignment: var = expr
-                var, expr = line.split("=", 1)
-                var = var.strip()
-                expr = expr.strip()
-                value = eval(expr, {}, variables)
-                variables[var] = value
+    try:
+        # Redirect stdout to capture prints
+        original_stdout = sys.stdout
+        sys.stdout = output_buffer
 
-            else:
-                return {
-                    "status": "error",
-                    "line": i,
-                    "message": f"Invalid statement: '{line}'"
-                }
+        # Execute the code in a restricted scope
+        exec(final_code, {}, variables)
 
-        except Exception as e:
-            return {
-                "status": "error",
-                "line": i,
-                "message": f"{type(e).__name__} at line {i}: {str(e)}"
-            }
+        sys.stdout = original_stdout  # Restore stdout
+        output_text = output_buffer.getvalue().strip()
+
+    except Exception as e:
+        sys.stdout = original_stdout  # Ensure stdout is always restored
+        return {
+            "status": "error",
+            "message": f"{type(e).__name__}: {str(e)}"
+        }
 
     return {
         "status": "success",
-        "variables": variables,
-        "output": "\n".join(output)
+        "variables": {k: v for k, v in variables.items() if not k.startswith('__')},
+        "output": output_text
     }
