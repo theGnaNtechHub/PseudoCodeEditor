@@ -1,58 +1,493 @@
 # parser.py
 """
-    Evaluates pseudo-code with variable assignments, print statements, and simple if-else blocks.
+Advanced Pseudo-code Parser and Evaluator for VteacH Platform
 
-    Supports:
-    - Assignments: x = 10
-    - Expressions: +, -, *, /, string concat, boolean logic
-    - Strings and Booleans: name = "John", flag = True
-    - Print: print x
-    - If-Else (4-space indentation, no nesting)
+Supports:
+- Variable assignments and expressions
+- Control structures (if-else, loops)
+- Functions and procedures
+- String and numeric operations
+- Boolean logic
+- Arrays and basic data structures
+- Step-by-step execution
+- Syntax validation and error detection
+- Learning hints and suggestions
 """
 
 import sys
 import io
+import re
+import ast
+import json
+from typing import Dict, List, Any, Tuple, Optional
+from dataclasses import dataclass
+from enum import Enum
 
-def evaluate_pseudocode(code: str):
-    lines = code.strip().split('\n')
-    variables = {}
-    output_buffer = io.StringIO()
+class TokenType(Enum):
+    KEYWORD = "keyword"
+    IDENTIFIER = "identifier"
+    NUMBER = "number"
+    STRING = "string"
+    OPERATOR = "operator"
+    DELIMITER = "delimiter"
+    COMMENT = "comment"
 
-    # Fix print statements: make print x ➝ print(x)
-    fixed_lines = []
-    for line in lines:
-        stripped = line.strip()
-        indent = len(line) - len(stripped)
+class ExecutionStep:
+    def __init__(self, line_number: int, code: str, variables: Dict, output: str = "", error: str = None):
+        self.line_number = line_number
+        self.code = code
+        self.variables = variables.copy()
+        self.output = output
+        self.error = error
 
-        if stripped.startswith("print ") and not stripped.startswith("print("):
-            expr = stripped[6:]  # Remove 'print '
-            fixed_line = " " * indent + f"print({expr})"
-        else:
-            fixed_line = line
-        fixed_lines.append(fixed_line)
+@dataclass
+class ParserError:
+    line: int
+    message: str
+    suggestion: str = ""
+    severity: str = "error"  # error, warning, info
 
-    final_code = "\n".join(fixed_lines)
+class PseudoCodeParser:
+    def __init__(self):
+        self.keywords = {
+            'if', 'else', 'endif', 'while', 'endwhile', 'for', 'endfor',
+            'function', 'endfunction', 'procedure', 'endprocedure',
+            'return', 'print', 'input', 'true', 'false', 'null'
+        }
+        self.operators = {
+            '+', '-', '*', '/', '//', '%', '**', '==', '!=', '<=', '>=', '<', '>',
+            'and', 'or', 'not', '=', '+=', '-=', '*=', '/='
+        }
+        self.delimiters = {',', ';', '(', ')', '[', ']', '{', '}'}
+        
+    def tokenize(self, code: str) -> List[Tuple[str, TokenType, int]]:
+        """Tokenize the pseudo-code into tokens with line numbers."""
+        tokens = []
+        lines = code.split('\n')
+        
+        for line_num, line in enumerate(lines, 1):
+            # Skip empty lines
+            if not line.strip():
+                continue
+                
+            # Handle comments
+            if line.strip().startswith('//'):
+                tokens.append((line.strip(), TokenType.COMMENT, line_num))
+                continue
+                
+            # Split line into tokens
+            current_token = ""
+            in_string = False
+            string_delimiter = None
+            
+            for char in line:
+                if char in ['"', "'"] and not in_string:
+                    in_string = True
+                    string_delimiter = char
+                    if current_token:
+                        tokens.extend(self._process_token(current_token, line_num))
+                        current_token = ""
+                    current_token = char
+                elif char == string_delimiter and in_string:
+                    in_string = False
+                    current_token += char
+                    tokens.append((current_token, TokenType.STRING, line_num))
+                    current_token = ""
+                    string_delimiter = None
+                elif in_string:
+                    current_token += char
+                elif char.isspace():
+                    if current_token:
+                        tokens.extend(self._process_token(current_token, line_num))
+                        current_token = ""
+                elif char in self.delimiters or char in self.operators:
+                    if current_token:
+                        tokens.extend(self._process_token(current_token, line_num))
+                        current_token = ""
+                    tokens.append((char, TokenType.DELIMITER if char in self.delimiters else TokenType.OPERATOR, line_num))
+                else:
+                    current_token += char
+                    
+            if current_token:
+                tokens.extend(self._process_token(current_token, line_num))
+                
+        return tokens
+    
+    def _process_token(self, token: str, line_num: int) -> List[Tuple[str, TokenType, int]]:
+        """Process a single token and determine its type."""
+        if not token:
+            return []
+            
+        # Check if it's a keyword
+        if token.lower() in self.keywords:
+            return [(token, TokenType.KEYWORD, line_num)]
+            
+        # Check if it's a number
+        if token.replace('.', '').replace('-', '').isdigit() or token.replace('.', '').replace('-', '').replace('e', '').replace('E', '').isdigit():
+            return [(token, TokenType.NUMBER, line_num)]
+            
+        # Check if it's an operator
+        if token in self.operators:
+            return [(token, TokenType.OPERATOR, line_num)]
+            
+        # Must be an identifier
+        return [(token, TokenType.IDENTIFIER, line_num)]
+    
+    def validate_syntax(self, code: str) -> List[ParserError]:
+        """Validate pseudo-code syntax and return errors/warnings."""
+        errors = []
+        lines = code.split('\n')
+        
+        # Check for basic syntax issues
+        for line_num, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith('//'):
+                continue
+                
+            # Check for unmatched delimiters
+            if stripped.count('(') != stripped.count(')'):
+                errors.append(ParserError(
+                    line_num, 
+                    "Unmatched parentheses",
+                    "Make sure all opening parentheses have matching closing parentheses",
+                    "error"
+                ))
+                
+            if stripped.count('[') != stripped.count(']'):
+                errors.append(ParserError(
+                    line_num, 
+                    "Unmatched brackets",
+                    "Make sure all opening brackets have matching closing brackets",
+                    "error"
+                ))
+                
+            # Check for common pseudo-code patterns
+            if stripped.startswith('if ') and not any(keyword in stripped for keyword in ['then', ':', '{']):
+                errors.append(ParserError(
+                    line_num,
+                    "Incomplete if statement",
+                    "Add 'then' or ':' after the condition",
+                    "warning"
+                ))
+                
+            if stripped.startswith('while ') and not any(keyword in stripped for keyword in ['do', ':', '{']):
+                errors.append(ParserError(
+                    line_num,
+                    "Incomplete while statement",
+                    "Add 'do' or ':' after the condition",
+                    "warning"
+                ))
+                
+        return errors
+    
+    def preprocess_code(self, code: str) -> str:
+        """Convert pseudo-code to valid Python code."""
+        lines = code.split('\n')
+        processed_lines = []
+        indent_level = 0
+        
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith('//'):
+                continue
+                
+            # Handle indentation
+            current_indent = len(line) - len(line.lstrip())
+            if current_indent > indent_level:
+                indent_level = current_indent
+            elif current_indent < indent_level:
+                indent_level = current_indent
+                
+            # Convert pseudo-code constructs to Python
+            processed_line = self._convert_pseudo_to_python(stripped)
+            if processed_line:  # Only add non-empty lines
+                # Add proper indentation
+                indent = "    " * (indent_level // 4)
+                processed_lines.append(indent + processed_line)
+            
+        return "\n".join(processed_lines)
+    
+    def _convert_pseudo_to_python(self, line: str) -> str:
+        """Convert a single line of pseudo-code to Python."""
+        # Handle print statements
+        if line.startswith('print '):
+            expr = line[6:].strip()
+            return f"print({expr})"
+            
+        # Handle input statements
+        if line.startswith('input '):
+            var_name = line[6:].strip()
+            return f"{var_name} = input()"
+            
+        # Handle if statements
+        if line.startswith('if ') and 'then' in line:
+            condition = line[3:line.find('then')].strip()
+            return f"if {condition}:"
+            
+        # Handle while statements
+        if line.startswith('while ') and 'do' in line:
+            condition = line[6:line.find('do')].strip()
+            return f"while {condition}:"
+            
+        # Handle for loops
+        if line.startswith('for '):
+            # Simple for loop conversion
+            parts = line[4:].split(' to ')
+            if len(parts) == 2:
+                var = parts[0].strip()
+                end = parts[1].strip()
+                return f"for {var} in range({end}):"
+                
+        # Handle function definitions
+        if line.startswith('function '):
+            func_name = line[9:line.find('(')].strip()
+            return f"def {func_name}:"
+            
+        # Handle procedure definitions
+        if line.startswith('procedure '):
+            proc_name = line[10:line.find('(')].strip()
+            return f"def {proc_name}:"
+            
+        # Handle end statements
+        if line.startswith('end'):
+            return ""
+            
+        # Handle boolean values
+        if line == 'true':
+            return 'True'
+        elif line == 'false':
+            return 'False'
+            
+        # Handle return statements
+        if line.startswith('return '):
+            return line
+            
+        return line
 
-    try:
+class PseudoCodeEvaluator:
+    def __init__(self):
+        self.parser = PseudoCodeParser()
+        self.execution_steps = []
+        self.variables = {}
+        self.output_buffer = io.StringIO()
+        
+    def evaluate(self, code: str, step_by_step: bool = False) -> Dict[str, Any]:
+        """Evaluate pseudo-code and return results."""
+        try:
+            # Validate syntax first
+            syntax_errors = self.parser.validate_syntax(code)
+            if any(error.severity == "error" for error in syntax_errors):
+                return {
+                    "status": "error",
+                    "message": "Syntax errors found",
+                    "errors": [{"line": e.line, "message": e.message, "suggestion": e.suggestion} for e in syntax_errors]
+                }
+            
+            # Preprocess code
+            processed_code = self.parser.preprocess_code(code)
+            
+            # Execute code
+            if step_by_step:
+                return self._execute_step_by_step(processed_code)
+            else:
+                return self._execute_normal(processed_code)
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Execution error: {str(e)}",
+                "suggestion": "Check your code for syntax errors or logical issues"
+            }
+    
+    def _execute_normal(self, code: str) -> Dict[str, Any]:
+        """Execute code normally and return results."""
         # Redirect stdout to capture prints
         original_stdout = sys.stdout
-        sys.stdout = output_buffer
+        sys.stdout = self.output_buffer
+        
+        try:
+            # Create execution environment
+            exec_globals = {
+                '__builtins__': {
+                    'print': print,
+                    'input': input,
+                    'len': len,
+                    'range': range,
+                    'str': str,
+                    'int': int,
+                    'float': float,
+                    'bool': bool,
+                    'list': list,
+                    'dict': dict,
+                    'True': True,
+                    'False': False,
+                    'None': None
+                }
+            }
+            
+            # Execute the code
+            exec(code, exec_globals, self.variables)
+            
+            # Get output
+            output = self.output_buffer.getvalue().strip()
+            
+            return {
+                "status": "success",
+                "variables": {k: v for k, v in self.variables.items() if not k.startswith('__')},
+                "output": output,
+                "warnings": [{"line": e.line, "message": e.message} for e in self.parser.validate_syntax(code) if e.severity == "warning"]
+            }
+            
+        finally:
+            sys.stdout = original_stdout
+            self.output_buffer.truncate(0)
+            self.output_buffer.seek(0)
+    
+    def _execute_step_by_step(self, code: str) -> Dict[str, Any]:
+        """Execute code step by step and return execution trace."""
+        lines = code.split('\n')
+        self.execution_steps = []
+        self.variables = {}
+        
+        original_stdout = sys.stdout
+        sys.stdout = self.output_buffer
+        
+        try:
+            exec_globals = {
+                '__builtins__': {
+                    'print': print,
+                    'input': input,
+                    'len': len,
+                    'range': range,
+                    'str': str,
+                    'int': int,
+                    'float': float,
+                    'bool': bool,
+                    'list': list,
+                    'dict': dict,
+                    'True': True,
+                    'False': False,
+                    'None': None
+                }
+            }
+            
+            for line_num, line in enumerate(lines, 1):
+                if not line.strip():
+                    continue
+                    
+                try:
+                    # Execute single line
+                    exec(line, exec_globals, self.variables)
+                    
+                    # Capture output for this step
+                    step_output = self.output_buffer.getvalue()
+                    self.output_buffer.truncate(0)
+                    self.output_buffer.seek(0)
+                    
+                    # Record step
+                    step = ExecutionStep(
+                        line_number=line_num,
+                        code=line.strip(),
+                        variables=self.variables.copy(),
+                        output=step_output.strip()
+                    )
+                    self.execution_steps.append(step)
+                    
+                except Exception as e:
+                    step = ExecutionStep(
+                        line_number=line_num,
+                        code=line.strip(),
+                        variables=self.variables.copy(),
+                        error=str(e)
+                    )
+                    self.execution_steps.append(step)
+                    break
+            
+            return {
+                "status": "success",
+                "execution_steps": [
+                    {
+                        "line_number": step.line_number,
+                        "code": step.code,
+                        "variables": step.variables,
+                        "output": step.output,
+                        "error": step.error
+                    }
+                    for step in self.execution_steps
+                ],
+                "final_variables": {k: v for k, v in self.variables.items() if not k.startswith('__')}
+            }
+            
+        finally:
+            sys.stdout = original_stdout
+            self.output_buffer.truncate(0)
+            self.output_buffer.seek(0)
 
-        # Execute the code in a restricted scope
-        exec(final_code, {}, variables)
+def evaluate_pseudocode(code: str, step_by_step: bool = False) -> Dict[str, Any]:
+    """
+    Main function to evaluate pseudo-code.
+    
+    Args:
+        code: The pseudo-code to evaluate
+        step_by_step: Whether to return step-by-step execution trace
+        
+    Returns:
+        Dictionary with evaluation results
+    """
+    evaluator = PseudoCodeEvaluator()
+    return evaluator.evaluate(code, step_by_step)
 
-        sys.stdout = original_stdout  # Restore stdout
-        output_text = output_buffer.getvalue().strip()
+def get_syntax_hints(code: str) -> List[Dict[str, str]]:
+    """Get syntax hints and suggestions for the given code."""
+    parser = PseudoCodeParser()
+    errors = parser.validate_syntax(code)
+    
+    hints = []
+    for error in errors:
+        hints.append({
+            "line": error.line,
+            "type": error.severity,
+            "message": error.message,
+            "suggestion": error.suggestion
+        })
+    
+    return hints
 
-    except Exception as e:
-        sys.stdout = original_stdout  # Ensure stdout is always restored
-        return {
-            "status": "error",
-            "message": f"{type(e).__name__}: {str(e)}"
-        }
+def get_learning_suggestions(code: str) -> List[str]:
+    """Get learning suggestions based on the code content."""
+    suggestions = []
+    
+    if 'if' in code.lower() and 'else' not in code.lower():
+        suggestions.append("Consider adding an 'else' clause to handle the case when the condition is false")
+    
+    if 'while' in code.lower() and 'break' not in code.lower():
+        suggestions.append("Make sure your while loop has a proper termination condition to avoid infinite loops")
+    
+    if 'print' in code.lower() and 'input' not in code.lower():
+        suggestions.append("Consider adding user input to make your program interactive")
+    
+    if code.count('=') > 5:
+        suggestions.append("Consider using more descriptive variable names to improve code readability")
+    
+    return suggestions
 
-    return {
-        "status": "success",
-        "variables": {k: v for k, v in variables.items() if not k.startswith('__')},
-        "output": output_text
-    }
+# Example usage and testing
+if __name__ == "__main__":
+    # Test the parser with sample pseudo-code
+    sample_code = """
+    // Simple pseudo-code example
+    x = 10
+    y = 20
+    if x < y then
+        print "x is less than y"
+    else
+        print "x is greater than or equal to y"
+    endif
+    """
+    
+    result = evaluate_pseudocode(sample_code)
+    print("Evaluation Result:", json.dumps(result, indent=2))
+    
+    # Test step-by-step execution
+    step_result = evaluate_pseudocode(sample_code, step_by_step=True)
+    print("\nStep-by-step Result:", json.dumps(step_result, indent=2))
