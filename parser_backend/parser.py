@@ -1,11 +1,11 @@
-# parser.py
+# parser_fixed.py - Complete corrected version with JSON serialization fix
 """
-Advanced Pseudo-code Parser and Evaluator for VteacH Platform
+Advanced Pseudo-code Parser and Evaluator for VteacH Platform - FIXED VERSION
 
 Supports:
 - Variable assignments and expressions
 - Control structures (if-else, loops)
-- Functions and procedures
+- Functions and procedures with proper parameter handling
 - String and numeric operations
 - Boolean logic
 - Arrays and basic data structures
@@ -224,6 +224,15 @@ class PseudoCodeParser:
             condition = line[3:line.find('then')].strip()
             return f"if {condition}:"
             
+        # Handle else if statements - FIXED
+        if line.startswith('else if ') and 'then' in line:
+            condition = line[8:line.find('then')].strip()  # Remove 'else if '
+            return f"elif {condition}:"
+            
+        # Handle else statements - FIXED
+        if line.startswith('else'):
+            return "else:"
+            
         # Handle while statements
         if line.startswith('while ') and 'do' in line:
             condition = line[6:line.find('do')].strip()
@@ -238,15 +247,31 @@ class PseudoCodeParser:
                 end = parts[1].strip()
                 return f"for {var} in range({end}):"
                 
-        # Handle function definitions
+        # Handle function definitions - FIXED VERSION
         if line.startswith('function '):
-            func_name = line[9:line.find('(')].strip()
-            return f"def {func_name}:"
+            # Extract function name and parameters
+            func_part = line[9:].strip()  # Remove 'function '
+            if '(' in func_part and ')' in func_part:
+                func_name = func_part[:func_part.find('(')].strip()
+                params_part = func_part[func_part.find('(')+1:func_part.find(')')].strip()
+                return f"def {func_name}({params_part}):"
+            else:
+                # Fallback for function without parameters
+                func_name = func_part.strip()
+                return f"def {func_name}():"
             
-        # Handle procedure definitions
+        # Handle procedure definitions - FIXED VERSION
         if line.startswith('procedure '):
-            proc_name = line[10:line.find('(')].strip()
-            return f"def {proc_name}:"
+            # Extract procedure name and parameters
+            proc_part = line[10:].strip()  # Remove 'procedure '
+            if '(' in proc_part and ')' in proc_part:
+                proc_name = proc_part[:proc_part.find('(')].strip()
+                params_part = proc_part[proc_part.find('(')+1:proc_part.find(')')].strip()
+                return f"def {proc_name}({params_part}):"
+            else:
+                # Fallback for procedure without parameters
+                proc_name = proc_part.strip()
+                return f"def {proc_name}():"
             
         # Handle end statements
         if line.startswith('end'):
@@ -270,6 +295,21 @@ class PseudoCodeEvaluator:
         self.execution_steps = []
         self.variables = {}
         self.output_buffer = io.StringIO()
+        
+    def _filter_serializable_variables(self, variables: Dict[str, Any]) -> Dict[str, Any]:
+        """Filter variables to only include JSON serializable objects."""
+        serializable_vars = {}
+        for key, value in variables.items():
+            if key.startswith('__'):
+                continue
+            try:
+                # Test if the value is JSON serializable
+                json.dumps(value)
+                serializable_vars[key] = value
+            except (TypeError, ValueError):
+                # Skip non-serializable objects like functions
+                continue
+        return serializable_vars
         
     def evaluate(self, code: str, step_by_step: bool = False) -> Dict[str, Any]:
         """Evaluate pseudo-code and return results."""
@@ -333,7 +373,7 @@ class PseudoCodeEvaluator:
             
             return {
                 "status": "success",
-                "variables": {k: v for k, v in self.variables.items() if not k.startswith('__')},
+                "variables": self._filter_serializable_variables(self.variables),
                 "output": output,
                 "warnings": [{"line": e.line, "message": e.message} for e in self.parser.validate_syntax(code) if e.severity == "warning"]
             }
@@ -384,11 +424,11 @@ class PseudoCodeEvaluator:
                     self.output_buffer.truncate(0)
                     self.output_buffer.seek(0)
                     
-                    # Record step
+                    # Record step with serializable variables
                     step = ExecutionStep(
                         line_number=line_num,
                         code=line.strip(),
-                        variables=self.variables.copy(),
+                        variables=self._filter_serializable_variables(self.variables.copy()),
                         output=step_output.strip()
                     )
                     self.execution_steps.append(step)
@@ -397,7 +437,7 @@ class PseudoCodeEvaluator:
                     step = ExecutionStep(
                         line_number=line_num,
                         code=line.strip(),
-                        variables=self.variables.copy(),
+                        variables=self._filter_serializable_variables(self.variables.copy()),
                         error=str(e)
                     )
                     self.execution_steps.append(step)
@@ -415,7 +455,7 @@ class PseudoCodeEvaluator:
                     }
                     for step in self.execution_steps
                 ],
-                "final_variables": {k: v for k, v in self.variables.items() if not k.startswith('__')}
+                "final_variables": self._filter_serializable_variables(self.variables)
             }
             
         finally:
