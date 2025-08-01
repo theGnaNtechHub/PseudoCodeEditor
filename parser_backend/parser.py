@@ -1,4 +1,4 @@
-# parser_fixed.py - Complete corrected version with JSON serialization fix
+# Complete corrected parser.py with proper indentation handling
 """
 Advanced Pseudo-code Parser and Evaluator for VteacH Platform - FIXED VERSION
 
@@ -181,29 +181,45 @@ class PseudoCodeParser:
         return errors
     
     def preprocess_code(self, code: str) -> str:
-        """Convert pseudo-code to valid Python code."""
+        """Convert pseudo-code to valid Python code with proper indentation."""
         lines = code.split('\n')
         processed_lines = []
-        indent_level = 0
         
         for line in lines:
             stripped = line.strip()
             if not stripped or stripped.startswith('//'):
                 continue
                 
-            # Handle indentation
-            current_indent = len(line) - len(line.lstrip())
-            if current_indent > indent_level:
-                indent_level = current_indent
-            elif current_indent < indent_level:
-                indent_level = current_indent
-                
-            # Convert pseudo-code constructs to Python
+            # Calculate original indentation
+            original_indent = len(line) - len(line.lstrip())
+            indent_level = original_indent // 4
+            
+            # Convert the line
             processed_line = self._convert_pseudo_to_python(stripped)
-            if processed_line:  # Only add non-empty lines
-                # Add proper indentation
-                indent = "    " * (indent_level // 4)
-                processed_lines.append(indent + processed_line)
+            
+            if not processed_line:
+                continue
+                
+            # Determine final indentation
+            if processed_line.startswith('def '):
+                # Function definition - use original indentation
+                final_indent = indent_level
+            elif processed_line.startswith(('if ', 'elif ', 'else:', 'while ', 'for ')):
+                # Control structure - use original indentation
+                final_indent = indent_level
+            elif stripped.startswith('end'):
+                # End statement - reduce indentation
+                final_indent = max(0, indent_level - 1)
+            else:
+                # Regular line - add one level if we have indentation
+                if indent_level > 0:
+                    final_indent = indent_level + 1
+                else:
+                    final_indent = indent_level
+            
+            # Add the line with proper indentation
+            indent = "    " * final_indent
+            processed_lines.append(indent + processed_line)
             
         return "\n".join(processed_lines)
     
@@ -224,12 +240,12 @@ class PseudoCodeParser:
             condition = line[3:line.find('then')].strip()
             return f"if {condition}:"
             
-        # Handle else if statements - FIXED
+        # Handle else if statements
         if line.startswith('else if ') and 'then' in line:
-            condition = line[8:line.find('then')].strip()  # Remove 'else if '
+            condition = line[8:line.find('then')].strip()
             return f"elif {condition}:"
             
-        # Handle else statements - FIXED
+        # Handle else statements
         if line.startswith('else'):
             return "else:"
             
@@ -247,7 +263,7 @@ class PseudoCodeParser:
                 end = parts[1].strip()
                 return f"for {var} in range({end}):"
                 
-        # Handle function definitions - FIXED VERSION
+        # Handle function definitions
         if line.startswith('function '):
             # Extract function name and parameters
             func_part = line[9:].strip()  # Remove 'function '
@@ -260,7 +276,7 @@ class PseudoCodeParser:
                 func_name = func_part.strip()
                 return f"def {func_name}():"
             
-        # Handle procedure definitions - FIXED VERSION
+        # Handle procedure definitions
         if line.startswith('procedure '):
             # Extract procedure name and parameters
             proc_part = line[10:].strip()  # Remove 'procedure '
