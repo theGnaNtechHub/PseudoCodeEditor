@@ -9,7 +9,6 @@ Supports:
 - String and numeric operations
 - Boolean logic
 - Arrays and basic data structures
-- Step-by-step execution
 - Syntax validation and error detection
 - Learning hints and suggestions
 """
@@ -32,13 +31,7 @@ class TokenType(Enum):
     DELIMITER = "delimiter"
     COMMENT = "comment"
 
-class ExecutionStep:
-    def __init__(self, line_number: int, code: str, variables: Dict, output: str = "", error: str = None):
-        self.line_number = line_number
-        self.code = code
-        self.variables = variables.copy()
-        self.output = output
-        self.error = error
+
 
 @dataclass
 class ParserError:
@@ -308,7 +301,6 @@ class PseudoCodeParser:
 class PseudoCodeEvaluator:
     def __init__(self):
         self.parser = PseudoCodeParser()
-        self.execution_steps = []
         self.variables = {}
         self.output_buffer = io.StringIO()
         
@@ -327,7 +319,7 @@ class PseudoCodeEvaluator:
                 continue
         return serializable_vars
         
-    def evaluate(self, code: str, step_by_step: bool = False) -> Dict[str, Any]:
+    def evaluate(self, code: str) -> Dict[str, Any]:
         """Evaluate pseudo-code and return results."""
         try:
             # Validate syntax first
@@ -343,10 +335,7 @@ class PseudoCodeEvaluator:
             processed_code = self.parser.preprocess_code(code)
             
             # Execute code
-            if step_by_step:
-                return self._execute_step_by_step(processed_code)
-            else:
-                return self._execute_normal(processed_code)
+            return self._execute_normal(processed_code)
                 
         except Exception as e:
             return {
@@ -399,99 +388,20 @@ class PseudoCodeEvaluator:
             self.output_buffer.truncate(0)
             self.output_buffer.seek(0)
     
-    def _execute_step_by_step(self, code: str) -> Dict[str, Any]:
-        """Execute code step by step and return execution trace."""
-        lines = code.split('\n')
-        self.execution_steps = []
-        self.variables = {}
-        
-        original_stdout = sys.stdout
-        sys.stdout = self.output_buffer
-        
-        try:
-            exec_globals = {
-                '__builtins__': {
-                    'print': print,
-                    'input': input,
-                    'len': len,
-                    'range': range,
-                    'str': str,
-                    'int': int,
-                    'float': float,
-                    'bool': bool,
-                    'list': list,
-                    'dict': dict,
-                    'True': True,
-                    'False': False,
-                    'None': None
-                }
-            }
-            
-            for line_num, line in enumerate(lines, 1):
-                if not line.strip():
-                    continue
-                    
-                try:
-                    # Execute single line
-                    exec(line, exec_globals, self.variables)
-                    
-                    # Capture output for this step
-                    step_output = self.output_buffer.getvalue()
-                    self.output_buffer.truncate(0)
-                    self.output_buffer.seek(0)
-                    
-                    # Record step with serializable variables
-                    step = ExecutionStep(
-                        line_number=line_num,
-                        code=line.strip(),
-                        variables=self._filter_serializable_variables(self.variables.copy()),
-                        output=step_output.strip()
-                    )
-                    self.execution_steps.append(step)
-                    
-                except Exception as e:
-                    step = ExecutionStep(
-                        line_number=line_num,
-                        code=line.strip(),
-                        variables=self._filter_serializable_variables(self.variables.copy()),
-                        error=str(e)
-                    )
-                    self.execution_steps.append(step)
-                    break
-            
-            return {
-                "status": "success",
-                "execution_steps": [
-                    {
-                        "line_number": step.line_number,
-                        "code": step.code,
-                        "variables": step.variables,
-                        "output": step.output,
-                        "error": step.error
-                    }
-                    for step in self.execution_steps
-                ],
-                "final_variables": self._filter_serializable_variables(self.variables)
-            }
-            
-        finally:
-            sys.stdout = original_stdout
-            self.output_buffer.truncate(0)
-            self.output_buffer.seek(0)
 
-def evaluate_pseudocode(code: str, step_by_step: bool = False) -> Dict[str, Any]:
+
+def evaluate_pseudocode(code: str) -> Dict[str, Any]:
     """
     Main function to evaluate pseudo-code.
     
     Args:
         code: The pseudo-code to evaluate
-        step_by_step: Whether to return step-by-step execution trace
         
     Returns:
         Dictionary with evaluation results
     """
     evaluator = PseudoCodeEvaluator()
-    return evaluator.evaluate(code, step_by_step)
+    return evaluator.evaluate(code)
 
 def get_syntax_hints(code: str) -> List[Dict[str, str]]:
     """Get syntax hints and suggestions for the given code."""
@@ -543,7 +453,3 @@ if __name__ == "__main__":
     
     result = evaluate_pseudocode(sample_code)
     print("Evaluation Result:", json.dumps(result, indent=2))
-    
-    # Test step-by-step execution
-    step_result = evaluate_pseudocode(sample_code, step_by_step=True)
-    print("\nStep-by-step Result:", json.dumps(step_result, indent=2))
