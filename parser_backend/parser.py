@@ -177,6 +177,7 @@ class PseudoCodeParser:
         """Convert pseudo-code to valid Python code with proper indentation."""
         lines = code.split('\n')
         processed_lines = []
+        current_indent = 0
         
         for line in lines:
             stripped = line.strip()
@@ -190,6 +191,12 @@ class PseudoCodeParser:
             # Convert the line
             processed_line = self._convert_pseudo_to_python(stripped)
             
+            # Handle end statements specially - they should reduce indentation but not be skipped
+            if stripped.startswith('end'):
+                # End statements reduce indentation but don't add any code
+                current_indent = max(0, current_indent - 1)
+                continue
+                
             if not processed_line:
                 continue
                 
@@ -197,18 +204,14 @@ class PseudoCodeParser:
             if processed_line.startswith('def '):
                 # Function definition - use original indentation
                 final_indent = indent_level
+                current_indent = indent_level + 1
             elif processed_line.startswith(('if ', 'elif ', 'else:', 'while ', 'for ')):
                 # Control structure - use original indentation
                 final_indent = indent_level
-            elif stripped.startswith('end'):
-                # End statement - reduce indentation
-                final_indent = max(0, indent_level - 1)
+                current_indent = indent_level + 1
             else:
-                # Regular line - add one level if we have indentation
-                if indent_level > 0:
-                    final_indent = indent_level + 1
-                else:
-                    final_indent = indent_level
+                # Regular line - use current indent level
+                final_indent = current_indent
             
             # Add the line with proper indentation
             indent = "    " * final_indent
@@ -249,12 +252,33 @@ class PseudoCodeParser:
             
         # Handle for loops
         if line.startswith('for '):
-            # Simple for loop conversion
-            parts = line[4:].split(' to ')
-            if len(parts) == 2:
-                var = parts[0].strip()
-                end = parts[1].strip()
-                return f"for {var} in range({end}):"
+            # Handle for loop with 'do' keyword
+            if ' to ' in line and ' do' in line:
+                # Extract variable and range
+                var_part = line[4:line.find(' to ')].strip()
+                # Remove the assignment part (e.g., "i = 1" becomes "i")
+                if ' = ' in var_part:
+                    var_name = var_part.split(' = ')[0].strip()
+                    start_value = var_part.split(' = ')[1].strip()
+                else:
+                    var_name = var_part
+                    start_value = "0"  # Default start value
+                range_part = line[line.find(' to ')+4:line.find(' do')].strip()
+                return f"for {var_name} in range({start_value}, {range_part} + 1):"
+            elif ' to ' in line:
+                # Handle for loop without 'do' keyword
+                parts = line[4:].split(' to ')
+                if len(parts) == 2:
+                    var = parts[0].strip()
+                    # Remove the assignment part (e.g., "i = 1" becomes "i")
+                    if ' = ' in var:
+                        var_name = var.split(' = ')[0].strip()
+                        start_value = var.split(' = ')[1].strip()
+                    else:
+                        var_name = var
+                        start_value = "0"  # Default start value
+                    end = parts[1].strip()
+                    return f"for {var_name} in range({start_value}, {end} + 1):"
                 
         # Handle function definitions
         if line.startswith('function '):
@@ -295,6 +319,11 @@ class PseudoCodeParser:
         # Handle return statements
         if line.startswith('return '):
             return line
+            
+        # Handle length() function calls
+        if 'length(' in line:
+            # Convert length(arr) to len(arr)
+            line = line.replace('length(', 'len(')
             
         return line
 
@@ -453,3 +482,21 @@ if __name__ == "__main__":
     
     result = evaluate_pseudocode(sample_code)
     print("Evaluation Result:", json.dumps(result, indent=2))
+    
+    # Test for loop specifically
+    for_loop_code = """
+    for i = 1 to 5 do
+        print "Iteration:"
+        print i
+    endfor
+    """
+    
+    print("\n--- Testing For Loop ---")
+    parser = PseudoCodeParser()
+    converted = parser.preprocess_code(for_loop_code)
+    print("Converted Python code:")
+    print(converted)
+    print("---")
+    
+    result2 = evaluate_pseudocode(for_loop_code)
+    print("For Loop Result:", json.dumps(result2, indent=2))

@@ -14,7 +14,6 @@ def evaluate():
     try:
         data = request.get_json(force=True)
         code = data.get("code", "").strip()
-        step_by_step = data.get("step_by_step", False)
 
         if not code:
             print("[ERROR] Empty code received.")
@@ -24,9 +23,8 @@ def evaluate():
             }), 400
 
         print(f"[INFO] Code received:\n{code}\n---")
-        print(f"[INFO] Step-by-step mode: {step_by_step}")
 
-        result = evaluate_pseudocode(code, step_by_step)
+        result = evaluate_pseudocode(code)
         print(f"[RESULT] {result}")
 
         return jsonify(result)
