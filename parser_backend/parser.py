@@ -162,7 +162,21 @@ class PseudoCodeParser:
                     "Add 'then' or ':' after the condition",
                     "warning"
                 ))
-                
+            
+            # Check for parameter formatting issues in function/procedure headers
+            if stripped.startswith(('function ', 'procedure ')) and '(' in stripped and ')' in stripped:
+                param_str = stripped[stripped.find('(')+1:stripped.find(')')].strip()
+                if param_str:
+                    params = [p.strip() for p in param_str.split(',')]
+                    for p in params:
+                        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", p):
+                            errors.append(ParserError(
+                                line_num,
+                                f"Invalid parameter name: '{p}'",
+                                "Parameter names should be valid identifiers (e.g., no numbers at the beginning, no special characters)",
+                                "warning"
+                            ))
+
             if stripped.startswith('while ') and not any(keyword in stripped for keyword in ['do', ':', '{']):
                 errors.append(ParserError(
                     line_num,
@@ -191,11 +205,11 @@ class PseudoCodeParser:
             # Convert the line
             processed_line = self._convert_pseudo_to_python(stripped)
             
-            # Handle end statements specially - they should reduce indentation but not be skipped
-            if stripped.startswith('end'):
-                # End statements reduce indentation but don't add any code
+            # Handle end statements that reduce indentation
+            if stripped.startswith(('endif', 'endwhile', 'endfor', 'endfunction', 'endprocedure')):
                 current_indent = max(0, current_indent - 1)
                 continue
+
                 
             if not processed_line:
                 continue
@@ -205,8 +219,7 @@ class PseudoCodeParser:
                 # Function definition - use original indentation
                 final_indent = indent_level
                 current_indent = indent_level + 1
-            elif processed_line.startswith(('if ', 'elif ', 'else:', 'while ', 'for ')):
-                # Control structure - use original indentation
+            elif processed_line.startswith(('if ', 'elif ', 'else:', 'while ', 'for ', 'def ')):
                 final_indent = indent_level
                 current_indent = indent_level + 1
             else:
@@ -315,7 +328,13 @@ class PseudoCodeParser:
             return 'True'
         elif line == 'false':
             return 'False'
-            
+        
+        # Handle break and continue
+        if line.strip() == 'break':
+            return 'break'
+        elif line.strip() == 'continue':
+            return 'continue'
+
         # Handle return statements
         if line.startswith('return '):
             return line
